@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=0.8,<0.9"]
+build-backend = "maturin"
+
+[project]
+name = "onnx_rustime_project"
+version = "0.1.0"
+description = "your description here"
+license = "MIT"
+
+dependencies = ["cffi>=1.0,<2.0"]
+
+[tool.maturin]
+features = ["include_pyo3"]

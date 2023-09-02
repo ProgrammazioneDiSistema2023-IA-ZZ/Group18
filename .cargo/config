@@ -1,0 +1,27 @@
+# This configuration is specifically for macOS builds, both Intel (x86_64) and Apple Silicon (aarch64).
+# Due to the way dynamic linking works on macOS, when building Rust code that interfaces with Python 
+# (or other dynamic languages/frameworks), we need to specify some additional linker arguments.
+#
+# The "-C link-arg=-undefined" argument tells the linker to allow undefined symbols. This is crucial 
+# because when the Rust code is loaded as a shared library (like a Python extension module), the 
+# symbols will be resolved by the host (Python in this case).
+#
+# The "-C link-arg=dynamic_lookup" argument instructs the linker to look up symbols in all loaded 
+# shared libraries, not just the one being created. This allows the Rust code to call functions and 
+# use symbols from the host application, again, Python in this context.
+#
+# These flags help in creating a smooth FFI (Foreign Function Interface) experience between Rust and Python 
+# on macOS.
+
+[target.x86_64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+]
+
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+]
+
