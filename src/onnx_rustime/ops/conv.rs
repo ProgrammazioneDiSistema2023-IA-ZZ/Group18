@@ -90,8 +90,6 @@ fn get_padding_size(
     let pad_left = pad_along_width / 2;
     let pad_right = pad_along_width - pad_left;
 
-    // yes top/bottom and right/left are swapped. No, I don't know
-    // why this change makes it conform to the pytorchn implementation.
     (
         pad_along_height,
         pad_along_width,
@@ -150,9 +148,6 @@ where
 /// We always convolve on flattened images and expect the input array in im2col
 /// style format.
 ///
-/// Read more here:
-/// - <https://leonardoaraujosantos.gitbook.io/artificial-inteligence/machine_learning/deep_learning/convolution_layer/making_faster>
-///
 /// Input:
 /// -----------------------------------------------
 /// - kernel_weights: weights of shape (F, C, HH, WW)
@@ -175,7 +170,6 @@ fn conv2d<'a, T, V, F: 'static + Float + std::ops::AddAssign>(
 where
     // This trait bound ensures that kernel and im2d can be passed as owned array or view.
     // AsArray just ensures that im2d can be converted to an array view via ".into()".
-    // Read more here: https://docs.rs/ndarray/0.12.1/ndarray/trait.AsArray.html
     V: AsArray<'a, F, Ix3>,
     T: AsArray<'a, F, Ix4>,
 {
@@ -198,7 +192,6 @@ where
 
     // Calculate output shapes H', W' for two types of Padding
     if padding == Padding::Same {
-        // https://mmuratarat.github.io/2019-01-17/implementing-padding-schemes-of-tensorflow-in-python
         // H' = H / stride
         // W' = W / stride
 
@@ -225,7 +218,6 @@ where
 
     // fn:im2col() for different Paddings
     if padding == Padding::Same {
-        // https://mmuratarat.github.io/2019-01-17/implementing-padding-schemes-of-tensorflow-in-python
         let (pad_num_h, pad_num_w, pad_top, pad_bottom, pad_left, pad_right) =
             get_padding_size(im_height, im_width, stride, kernel_height, kernel_width);
         let mut im2d_arr_pad: Array3<F> = Array::zeros((
@@ -235,7 +227,7 @@ where
         ));
         let pad_bottom_int = (im_height + pad_num_h) - pad_bottom;
         let pad_right_int = (im_width + pad_num_w) - pad_right;
-        // https://github.com/rust-ndarray/ndarray/issues/823
+
         im2d_arr_pad
             .slice_mut(s![.., pad_top..pad_bottom_int, pad_left..pad_right_int])
             .assign(&im2d_arr);
@@ -285,10 +277,7 @@ where
             bias_array.shape(),
             x.shape()
         );
-        // Yes this is really necessary. Broadcasting with ndarray-rust
-        // starts at the right side of the shape, so we have to add
-        // the axes by hand (else it thinks that it should compare the
-        // output width and the bias channels).
+
         (x + &bias_array
             .clone()
             .insert_axis(Axis(1))

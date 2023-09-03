@@ -79,7 +79,7 @@ Clone this repository and run it
 
 ```bash
 git clone https://github.com/GLorenzo679/PDS-Project.git
-cd PDS-Project
+cd <your root folder>
 cargo run
 ```
 
@@ -109,7 +109,7 @@ To set up the Python environment for Rust bindings, follow these steps:
 1. Create a virtual environment from the root folder of the project:
 
    ```bash
-   cd PDS-Project
+   cd <your root folder>
    python3 -m venv ./py_onnx_rustime/rust-binding/
    ```
 
@@ -137,6 +137,9 @@ To set up the Python environment for Rust bindings, follow these steps:
    ```
 
 5. Run the test demo from your environment:
+
+   _Pay attention to be in the root folder of the project, as the two bindings demo have hard coded paths in them, and an execution from a different folder would result in an error._
+
    ```bash
    python3 ./py_onnx_rustime/test_onnx_rustime.py
    ```
@@ -146,8 +149,6 @@ You will be greeted with a barebone interactive menu, similar to the previous on
 
 After selecting the options, Python will call the Rust-powered functions for loading the chosen model & data, and running the model.
 
-_That's all!_ Now we will dwell into more technical details about the implementation. The following sections could be very useful to you if you seek to contribute to the project or simply understand it. 😉
-
 ### Setting Up the NodeJS Environment for Rust Bindings
 
 To set up the NodeJS environment for Rust bindings, follow these steps:
@@ -155,11 +156,14 @@ To set up the NodeJS environment for Rust bindings, follow these steps:
 1. Install al the node module dependencies
 
    ```bash
-   cd PDS-Project/js_onnx_rustime/
+   cd <your root folder>/js_onnx_rustime/
    npm i
    ```
 
 2. Run the test demo from your environment:
+
+   _Pay attention to be in the root folder of the project, as the two bindings demo have hard coded paths in them, and an execution from a different folder would result in an error._
+
    ```bash
    node ./js_onnx_rustime/test_onnx_rustime.js
    ```
@@ -167,16 +171,22 @@ To set up the NodeJS environment for Rust bindings, follow these steps:
 You will be greeted with a barebone interactive menu, similar to the previous one:
 ![Interactive menu](./screenshots/intro_python.png)
 
+_That's all!_ Now we will dwell into more technical details about the implementation. The following sections could be very useful to you if you seek to contribute to the project or simply understand it. 😉
+
 ## 📂 Project Structure
 
 The following outlines the structure of the ONNX Rustime project. We will delve into the specifics of each part, providing insights into their purpose and how they integrate into the larger framework.
 
 ```
 .
+├── 📂 js_onnx_rustime         // javascript demo project
+│ ├── package.json
+│ └── test_onnx-rustime.js
 ├── 📂 models                 // pre-trained models with test data
 │ ├── 📂 bvlcalexnet-12
 │ ├── 📂 caffenet-12
 │ ├── 📂 mnist-8
+│ ├── 📂 resnet18-v2-7
 │ ├── 📂 resnet152-v2-7
 │ ├── 📂 squeezenet1.0-12
 │ └── 📂 zfnet512-12
@@ -187,7 +197,7 @@ The following outlines the structure of the ONNX Rustime project. We will delve 
 ├── 📂 screenshots
 ├── 📂 src
 │ ├── 📂 onnx_rustime
-│ │ ├── 📂 backend            // helper functions, parser, runtime functionalities
+│ │ ├── 📂 backend            // helper functions, parser, preprocessing, runtime functionalities
 │ │ ├── 📂 onnx_proto         // ONNX data structures
 │ │ ├── 📂 ops                // supported operations
 │ │ ├── mod.rs
@@ -266,20 +276,20 @@ The ONNX Parser in ONNX Rustime, as defined in `src/onnx_rustime/backend/parser.
 1. **Model Loading**: With `load_model`, you can load an ONNX model from a specified path. This function reads the file, deserializes it, and returns a `ModelProto` structure representing the entire ONNX model.
 
    ```rust
-   pub fn load_model(path: &str) -> Result<ModelProto, OnnxError>
+   pub fn load_model(path: String) -> Result<ModelProto, OnnxError>
    ```
 
 1. **Data Loading**: The `load_data` function allows you to load tensor data from a given path. It returns a `TensorProto` structure, which represents a tensor value in ONNX.
 
    ```rust
-   pub fn load_data(path: &str) -> Result<TensorProto, OnnxError>
+   pub fn load_data(path: String) -> Result<TensorProto, OnnxError>
    ```
 
 1. **Model and Data Saving**: Although not primarily used, the parser also offers functionalities to save a given `ModelProto` or `TensorProto` back to a file. This can be useful for scenarios where modifications to the model or data are made and need to be persisted.
 
    ```rust
-   pub fn save_model(model: &ModelProto, path: &str) -> Result<(), OnnxError>
-   pub fn save_data(tensor: &TensorProto, path: &str) -> Result<(), OnnxError>
+   pub fn save_model(model: &ModelProto, path: String) -> Result<(), OnnxError>
+   pub fn save_data(tensor: &TensorProto, path: String) -> Result<(), OnnxError>
    ```
 
 1. **Data Parsing**: The parser can convert raw byte data into floating-point values (`parse_raw_data_as_floats`) and 64-bit integers (`parse_raw_data_as_ints64`). This is essential for interpreting tensor data stored in the raw byte format inside the `TensorProto`.
@@ -391,6 +401,8 @@ pub fn concat(
 ```
 
 **Conv**: Fundamental convolution operation for CNNs.
+
+We adapted the original implementation of [convolution-rs](https://github.com/Conzel/convolutions-rs) in order to support multiple batch convolution, with group selection and dilation.
 
 ```rust
 pub fn conv(
@@ -524,7 +536,14 @@ This modular and developer-friendly design ensures that ONNX Rustime remains ext
 
 ## 📐 Automatic Data Preprocessing
 
-ONNX Rustime simplifies data preprocessing for the ImageNet dataset. Currently, this preprocessing step is exclusively available for the ResNet model.
+ONNX Rustime simplifies data preprocessing for the ImageNet dataset.
+
+You can select any image (in all common formats) and produce a serialized pb file. This serialized pb file is a representation of the pre processed image.
+
+You can find the corresponding code on src/backend/pre_processing.rs.
+
+You can then use this serialized pb file as an input for your network to test it out.
+Currently, this preprocessing step works best for the ResNet model.
 
 ### Preprocessing Steps for the ImageNet Dataset
 
@@ -621,7 +640,7 @@ For example, to load an ONNX model and run it with some input data:
 import onnx_rustime_lib as onnx_rustime
 
 model_id = onnx_rustime.py_load_model("path_to_model.onnx")
-data_id = onnx_rustime.py_load_data("path_to_input_data.onnx")
+data_id = onnx_rustime.py_load_data("path_to_input_data.pb")
 output_id = onnx_rustime.py_run(model_id, data_id, verbose=True)
 ```
 
@@ -635,13 +654,13 @@ The ONNX Rustime project provides a basic integration between JavaScript and Rus
 
 ### JavaScript-Rust Binding Overview
 
-The binding exposes several functions that allow Python users to interact with the ONNX runtime implemented in Rust. Key data structures like `ModelProto` and `TensorProto` from the ONNX specification are wrapped in IDs. These IDs act as opaque pointers, abstracting away the underlying Rust details from the JavaScript side. This design ensures a clean separation between the two languages and hides the intricacies of the Rust implementation.
+The binding exposes several functions that allow JavaScript users to interact with the ONNX runtime implemented in Rust. Key data structures like `ModelProto` and `TensorProto` from the ONNX specification are wrapped in IDs. These IDs act as opaque pointers, abstracting away the underlying Rust details from the JavaScript side. This design ensures a clean separation between the two languages and hides the intricacies of the Rust implementation.
 All the function arguments are passed behind a ModuleContext struct, and outputs are wrapped around a JSResult struct.
 
 ### Exposed JavaScript Functions
 
 Here's a brief overview of the JavaScript functions generated by the binding.
-First you find the rust function signature and then the corresponding JavaScript exposed function.
+First you find the Rust function signature and then the corresponding JavaScript exposed function.
 
 ```rust
 js_load_model(cx: mut ModuleContext) -> JsResult<JsNumber>
@@ -713,7 +732,7 @@ Here's the module definition:
     }
 ```
 
-When using this library in Python, you should import it as:
+When using this library in JavaScript, you should import it as:
 
 ```javascript
 const onnx_rustime = require(".");
@@ -723,7 +742,7 @@ This allows you to access and utilize the defined Rust functions seamlessly with
 
 ### Usage
 
-To use the JavaScript-Rust binding, you'll first need to install all the required node modules, as described in the main README section. Once the environment is set up, you can directly call the provided Python functions to interact with the ONNX runtime.
+To use the JavaScript-Rust binding, you'll first need to install all the required node modules, as described in the main README section. Once the environment is set up, you can directly call the provided JavaScript functions to interact with the ONNX runtime.
 
 For example, to load an ONNX model and run it with some input data:
 
@@ -731,7 +750,7 @@ For example, to load an ONNX model and run it with some input data:
 const onnx_rustime = require(".");
 
 model_id = onnx_rustime.js_load_model("path_to_model.onnx");
-data_id = onnx_rustime.js_load_data("path_to_input_data.onnx");
+data_id = onnx_rustime.js_load_data("path_to_input_data.pb");
 output_id = onnx_rustime.js_run(model_id, data_id, True);
 ```
 
