@@ -43,7 +43,7 @@ pub fn parse_raw_data_as_ints64(raw_data: &[u8]) -> Vec<i64> {
 pub struct OnnxParser;
 
 impl OnnxParser {
-    pub fn load_model(path: &str) -> Result<ModelProto, OnnxError> {
+    pub fn load_model(path: String) -> Result<ModelProto, OnnxError> {
         let mut file = std::fs::File::open(path).map_err(|_| OnnxError::InternalError("Failed to open model file".to_string()))?;
         let mut stream = CodedInputStream::new(&mut file);
 
@@ -53,7 +53,7 @@ impl OnnxParser {
         Ok(model)
     }
 
-    pub fn load_data(path: &str) -> Result<TensorProto, OnnxError> {
+    pub fn load_data(path: String) -> Result<TensorProto, OnnxError> {
         let mut file = std::fs::File::open(path).map_err(|_| OnnxError::InternalError("Failed to open data file".to_string()))?;
         let mut stream = CodedInputStream::new(&mut file);
 
@@ -64,14 +64,14 @@ impl OnnxParser {
     }
 
     #[allow(dead_code)]
-    pub fn save_model(model: &ModelProto, path: &str) -> Result<(), OnnxError> {
+    pub fn save_model(model: &ModelProto, path: String) -> Result<(), OnnxError> {
         let mut file = std::fs::File::create(path).map_err(|_| OnnxError::InternalError("Failed to create model file".to_string()))?;
         model.write_to_writer(&mut file).map_err(|_| OnnxError::InternalError("Failed to write model to file".to_string()))?;
         Ok(())
     }
 
     #[allow(dead_code)]
-    pub fn save_data(tensor: &TensorProto, path: &str) -> Result<(), OnnxError> {
+    pub fn save_data(tensor: &TensorProto, path: String) -> Result<(), OnnxError> {
         let mut file = std::fs::File::create(path).map_err(|_| OnnxError::InternalError("Failed to create data file".to_string()))?;
         tensor.write_to_writer(&mut file).map_err(|_| OnnxError::InternalError("Failed to write tensor to file".to_string()))?;
         Ok(())

@@ -3,6 +3,7 @@ use crate::onnx_rustime::onnx_proto::onnx_ml_proto3::*;
 use crate::onnx_rustime::ops::utils::{ndarray_to_tensor_proto, tensor_proto_to_ndarray};
 use protobuf::{ProtobufEnum, RepeatedField};
 use std::collections::HashMap;
+use crate::onnx_rustime::shared::{MODEL_NAME, Model};
 
 /// Represents the various types of errors that can occur within the ONNX runtime.
 ///
@@ -442,11 +443,29 @@ pub fn duplicate_input_tensor(input: &TensorProto, n: usize) -> TensorProto {
 
 use ndarray::prelude::*;
 
-fn softmax(logits: ArrayView1<f32>) -> Array1<f32> {
-    let max = logits.fold(0. / 0., |m, &val| f32::max(m, val)); // NaN-safe max
-    let exps = logits.mapv(|x| (x - max).exp());
-    let sum = exps.scalar_sum();
-    exps / sum
+fn logits_to_prob(logits: ArrayView1<f32>) -> Array1<f32> {
+    let model_name = {
+        let lock = MODEL_NAME.lock().unwrap();
+        lock.clone()
+    };
+
+    match model_name {
+        Model::ResNet => {
+            let max = logits.fold(0. / 0., |m, &val| f32::max(m, val)); // NaN-safe max
+            let exps = logits.mapv(|x| (x - max).exp());
+            let sum = exps.sum();
+            
+            exps / sum
+        },
+        Model::Mnist => {
+            let max = logits.fold(0. / 0., |m, &val| f32::max(m, val)); // NaN-safe max
+            let exps = logits.mapv(|x| (x - max).exp());
+            let sum = exps.sum();
+            
+            exps / sum
+        },
+        _ => logits.to_owned()
+    }
 }
 
 pub fn find_top_5_peak_classes(output: &ArrayD<f32>) -> Option<Vec<Vec<(usize, f32)>>> {
@@ -460,8 +479,9 @@ pub fn find_top_5_peak_classes(output: &ArrayD<f32>) -> Option<Vec<Vec<(usize, f
 
     // Apply softmax and find the top 5 peak classes for each batch
     let mut top_5_peak_classes = Vec::with_capacity(first_dim);
+
     for batch in reshaped.outer_iter() {
-        let probabilities = softmax(batch.view());
+        let probabilities = logits_to_prob(batch.view());
 
         let mut indexed_values: Vec<(usize, f32)> = probabilities.iter().enumerate().map(|(i, &v)| (i, v)).collect();
         indexed_values.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap()); // Sort in descending order

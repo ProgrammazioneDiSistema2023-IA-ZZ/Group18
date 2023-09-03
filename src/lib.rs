@@ -20,6 +20,9 @@ mod common {
     pub use onnx_rustime::onnx_proto::onnx_ml_proto3::ModelProto;
     pub use onnx_rustime::onnx_proto::onnx_ml_proto3::TensorProto;
     pub use onnx_rustime::ops::utils::tensor_proto_to_ndarray;
+
+    pub use onnx_rustime::shared::Model;
+    pub use onnx_rustime::shared::MODEL_NAME;
     pub use onnx_rustime::shared::VERBOSE;
 
     pub type ModelId = usize; // An alias for our model IDs.
@@ -64,7 +67,26 @@ mod include_pyo3 {
 
     #[pyfunction]
     pub fn py_load_model(path: &str) -> PyResult<ModelId> {
-        match OnnxParser::load_model(path) {
+        let model_enum = match path {
+            "models/bvlcalexnet-12/bvlcalexnet-12.onnx" => Model::AlexNet,
+            "models/caffenet-12/caffenet-12.onnx" => Model::CaffeNet,
+            "models/mnist-8/mnist-8.onnx" => Model::Mnist,
+            "models/resnet152-v2-7/resnet152-v2-7.onnx" => Model::ResNet,
+            "models/squeezenet1.0-12/squeezenet1.0-12.onnx" => Model::SqueezeNet,
+            "models/zfnet512-12/zfnet512-12.onnx" => Model::ZFNet,
+            _ => {
+                return Err(PyErr::new::<pyo3::exceptions::PyException, _>(
+                    "Invalid model path",
+                ))
+            }
+        };
+
+        {
+            let mut d = MODEL_NAME.lock().unwrap();
+            *d = model_enum;
+        }
+
+        match OnnxParser::load_model(path.to_string()) {
             Ok(model) => {
                 let id = store_model(model);
                 Ok(id)
@@ -78,7 +100,7 @@ mod include_pyo3 {
 
     #[pyfunction]
     pub fn py_load_data(path: &str) -> PyResult<DataId> {
-        match OnnxParser::load_data(path) {
+        match OnnxParser::load_data(path.to_string()) {
             Ok(tensor) => {
                 let id = store_data(tensor);
                 Ok(id)
@@ -131,18 +153,24 @@ mod include_pyo3 {
     }
 
     #[pyfunction]
-    pub fn py_display_outputs(predicted_data_id: DataId, expected_data_id: DataId) -> PyResult<()> {
-        // Retrieve the predicted and expected TensorProto from storages
+    pub fn py_display_outputs(
+        predicted_data_id: DataId,
+        expected_data_id: Option<DataId>,
+    ) -> PyResult<()> {
+        // Retrieve the predicted TensorProto from storages
         let predicted_tensor = get_data(predicted_data_id).ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid predicted data ID")
         })?;
 
-        let expected_tensor = get_data(expected_data_id).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid expected data ID")
-        })?;
+        // Retrieve the expected TensorProto from storages, if available
+        let expected_tensor = match expected_data_id {
+            Some(id) => Some(get_data(id).ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid expected data ID")
+            })?),
+            None => None,
+        };
 
-        // Call the original display_outputs function
-        display_outputs(&predicted_tensor, &expected_tensor);
+        display_outputs(&predicted_tensor, expected_tensor);
 
         Ok(())
     }
@@ -167,7 +195,24 @@ mod include_neon {
     fn js_load_model(mut cx: FunctionContext) -> JsResult<JsNumber> {
         let path = cx.argument::<JsString>(0)?.value(&mut cx);
 
-        match OnnxParser::load_model(&path) {
+        println!("path: {:?}", path);
+
+        let model_enum = match path.as_str() {
+            "models/bvlcalexnet-12/bvlcalexnet-12.onnx" => Model::AlexNet,
+            "models/caffenet-12/caffenet-12.onnx" => Model::CaffeNet,
+            "models/mnist-8/mnist-8.onnx" => Model::Mnist,
+            "models/resnet152-v2-7/resnet152-v2-7.onnx" => Model::ResNet,
+            "models/squeezenet1.0-12/squeezenet1.0-12.onnx" => Model::SqueezeNet,
+            "models/zfnet512-12/zfnet512-12.onnx" => Model::ZFNet,
+            _ => return cx.throw_error("Invalid model path"),
+        };
+
+        {
+            let mut d = MODEL_NAME.lock().unwrap();
+            *d = model_enum;
+        }
+
+        match OnnxParser::load_model(path) {
             Ok(model) => {
                 let id = store_model(model);
                 Ok(cx.number(id as f64))
@@ -182,7 +227,7 @@ mod include_neon {
     fn js_load_data(mut cx: FunctionContext) -> JsResult<JsNumber> {
         let path = cx.argument::<JsString>(0)?.value(&mut cx);
 
-        match OnnxParser::load_data(&path) {
+        match OnnxParser::load_data(path) {
             Ok(tensor) => {
                 let id = store_data(tensor);
                 Ok(cx.number(id as f64))
@@ -267,7 +312,7 @@ mod include_neon {
             }
         };
 
-        display_outputs(&predicted_tensor, &expected_tensor);
+        display_outputs(&predicted_tensor, Some(expected_tensor));
 
         Ok(cx.undefined())
     }

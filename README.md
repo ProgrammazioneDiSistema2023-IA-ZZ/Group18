@@ -26,13 +26,15 @@ Welcome to ONNX Rustime, a Rust-inspired **ONNX** runtime. <br>This project aims
   - [Operations Overview](#operations-overview)
   - [Supported Operations](#supported-operations)
   - [Extending ONNX Rustime with New Operations](#extending-onnx-rustime-with-new-operations)
+- [📐 Automatic Data Preprocessing](#automatic-data-preprocessing)
+  - [Preprocessing Steps for the ImageNet Dataset](#preprocessing-steps-for-the-imageNet-dataset)
 - [🐍 Python-Rust Binding with ONNX Rustime](#-python-rust-binding-with-onnx-rustime)
   - [Python Rust Binding Overview](#python-rust-binding-overview)
   - [Exposed Python Functions](#exposed-python-functions)
   - [Usage](#usage)
-- [🟢 NodeJS-Rust Binding with ONNX Rustime](#-nodejs-rust-binding-with-onnx-rustime)
-  - [NodeJS Rust Binding Overview](#nodejs-rust-binding-overview)
-  - [Exposed JavaScript Functions](#exposed-nodejs-functions)
+- [🟢 JavaScript-Rust Binding with ONNX Rustime](#-javascript-rust-binding-with-onnx-rustime)
+  - [JavaScript Rust Binding Overview](#javascript-rust-binding-overview)
+  - [Exposed JavaScript Functions](#exposed-javascript-functions)
   - [Usage](#usage)
 - [👩‍💻 Contribution](#-contribution)
 
@@ -45,10 +47,9 @@ Welcome to ONNX Rustime, a Rust-inspired **ONNX** runtime. <br>This project aims
 - 🚀 **Run network inference post-parsing**: Once your ONNX files are parsed, run network inferences seamlessly.
 - 🔨 **Scaffold for adding operations**: You can easily extend this runtime with additional operations, so that more networks are supported.
 - 📊 **Demo-ready with multiple CNNs**: The project comes with multiple convolutional neural networks ready for demonstration. Feel free to extend and experiment.
-
 - 🔄 **Supports batching for simultaneous inferences**: Run multiple inferences simultaneously with the batching feature, leveraging [`rayon`](https://github.com/rayon-rs/rayon) for parallelization of batches.
 - 💾 **Serialize models & data with ease**: Serialization made easy for both models and data.
-- 🐍 **Seamless Python integration via Rust bindings**: Integrate with Python effortlessly using the provided Rust bindings.
+- 🐍 **Seamless Python and JavaScript integration via Rust bindings**: Integrate with Python and JavaScript effortlessly using the provided Rust bindings.
 
 ## 🧠 Supported models
 
@@ -95,6 +96,7 @@ Compare a non verbose execution with a verbose execution.
 ### Non verbose execution of a network
 
 ![Non Verbose execution](./screenshots/run_non_verbose.png)
+![Non Verbose execution 2](./screenshots/run_non_verbose_2.png)
 
 ### Verbose execution of a network
 
@@ -520,6 +522,25 @@ For developers keen on extending ONNX Rustime's capabilities, adding new operati
 
 This modular and developer-friendly design ensures that ONNX Rustime remains extensible, catering to evolving neural network architectures and operations.
 
+## 📐 Automatic Data Preprocessing
+
+ONNX Rustime simplifies data preprocessing for the ImageNet dataset. Currently, this preprocessing step is exclusively available for the ResNet model.
+
+### Preprocessing Steps for the ImageNet Dataset
+
+Our preprocessing pipeline for the ImageNet dataset involves the following steps:
+
+1. Rescaling: We begin by rescaling the image to a size of 256 pixels while maintaining the original image's proportions.
+2. Center Cropping: Next, we perform center cropping, reducing the image size to a standardized 224 by 224 dimensions.
+3. Data Type Conversion: Following cropping, we convert pixel values to floating-point data type and normalize them.
+4. Channel Separation: The RGB image is split into three separate channels to create a tensor of shape 3x224x224.
+5. Protobuf Conversion: Finally, we convert the preprocessed image into a protobuf file. This file can be used as input for further executions without requiring additional preprocessing steps.
+
+This automatic data preprocessing enhances the efficiency and consistency of working with the ImageNet dataset, facilitating seamless integration into your ResNet model training pipeline.
+
+Here is an example of the preprocessing execution:
+![Preprocessing](./screenshots/preprocessing.png)
+
 ## 🐍 Python-Rust Binding with ONNX Rustime
 
 The ONNX Rustime project provides a basic integration between Python and Rust, allowing users to harness the power of Rust's performance and safety while working within the Python ecosystem. This integration is achieved using the [PyO3](https://github.com/PyO3/pyo3) library, which facilitates the creation of Python modules and native extensions in Rust.
@@ -608,11 +629,11 @@ As discussed in the usage section, a test demo example is provided in `./py_onnx
 
 For more details on how Rust and Python integration works, and to dive deeper into the capabilities of PyO3, visit the [official PyO3 documentation](https://pyo3.rs/v0.15.0/).
 
-## 🟢 NodeJS-Rust Binding with ONNX Rustime
+## 🟢 JavaScript-Rust Binding with ONNX Rustime
 
 The ONNX Rustime project provides a basic integration between JavaScript and Rust, allowing users to harness the power of Rust's performance and safety while working within the JavaScript ecosystem. This integration is achieved using the [neon](https://github.com/neon-bindings/neon) library, which facilitates the creation of JavaScript modules and native extensions in Rust.
 
-### NodeJS-Rust Binding Overview
+### JavaScript-Rust Binding Overview
 
 The binding exposes several functions that allow Python users to interact with the ONNX runtime implemented in Rust. Key data structures like `ModelProto` and `TensorProto` from the ONNX specification are wrapped in IDs. These IDs act as opaque pointers, abstracting away the underlying Rust details from the JavaScript side. This design ensures a clean separation between the two languages and hides the intricacies of the Rust implementation.
 All the function arguments are passed behind a ModuleContext struct, and outputs are wrapped around a JSResult struct.
@@ -702,7 +723,7 @@ This allows you to access and utilize the defined Rust functions seamlessly with
 
 ### Usage
 
-To use the NodeJS-Rust binding, you'll first need to install all the required node modules, as described in the main README section. Once the environment is set up, you can directly call the provided Python functions to interact with the ONNX runtime.
+To use the JavaScript-Rust binding, you'll first need to install all the required node modules, as described in the main README section. Once the environment is set up, you can directly call the provided Python functions to interact with the ONNX runtime.
 
 For example, to load an ONNX model and run it with some input data:
 
@@ -716,7 +737,7 @@ output_id = onnx_rustime.js_run(model_id, data_id, True);
 
 As discussed in the usage section, a test demo example is provided in `./js_onnx_rustime/test_onnx_rustime.js`.
 
-For more details on how Rust and NodeJS integration works, and to dive deeper into the capabilities of neon, visit the [official neon documentation](https://docs.rs/neon/latest/neon/).
+For more details on how Rust and JavaScript integration works, and to dive deeper into the capabilities of neon, visit the [official neon documentation](https://docs.rs/neon/latest/neon/).
 
 ## 👩‍💻 Contribution
 

@@ -1,7 +1,7 @@
 extern crate image;
 extern crate ndarray;
 
-use image::{imageops, DynamicImage, GenericImageView, Rgb};
+use image::{imageops, GenericImageView};
 use ndarray::{prelude::*, Array3, ArrayD};
 
 use crate::onnx_rustime::backend::{helper::OnnxError, parser::OnnxParser};
@@ -13,7 +13,7 @@ const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
 const STD: [f32; 3] = [0.229, 0.224, 0.225];
 const SCALE_FACTOR: f32 = 255.0;
 
-fn preprocess_image(path: &str) -> ArrayD<f32> {
+fn preprocess_image(path: String) -> ArrayD<f32> {
     // Load the image
     let mut img = image::open(path).unwrap();
 
@@ -61,9 +61,6 @@ fn preprocess_image(path: &str) -> ArrayD<f32> {
     // Transpose it from HWC to CHW layout
     arr.swap_axes(0, 2);
 
-    // Convert to float and normalize
-    let mut arr_f: Array3<f32> = arr.mapv(|x| x as f32);
-
     let mean = Array::from_shape_vec(
         (3, 1, 1),
         vec![
@@ -98,38 +95,54 @@ fn preprocess_image(path: &str) -> ArrayD<f32> {
     arr_d
 }
 
-fn preprocess_image_mnist(path: &str) -> () {
-    // Load the image
-    let img = image::open(path).unwrap();
+//fn preprocess_image_mnist(path: &str) -> () {
+//    // Load the image
+//    let img = image::open(path).unwrap();
+//
+//    // Convert the RGB image to grayscale
+//    let mut grayscale_image = img.grayscale();
+//
+//    let rescaled_img = grayscale_image.resize(28, 28, imageops::FilterType::Gaussian);
+//
+//    let inverted_img = rescaled_img.pixels().for_each(|x| x.2 .0[0] -= 255);
+//
+//    inverted_img
+//        .save("data/inverted_grayscale_image.jpg")
+//        .unwrap();
+//}
 
-    // Convert the RGB image to grayscale
-    let mut grayscale_image = img.grayscale();
+use colored::Colorize;
 
-    let rescaled_img = grayscale_image.resize(28, 28, imageops::FilterType::Gaussian);
+pub fn serialize_image(input_path: String, output_path: String) -> Result<(), OnnxError> {
+    println!("{}", "🚀 Starting to preprocess the image...");
 
-    let inverted_img = rescaled_img.pixels().for_each(|x| x.2 .0[0] -= 255);
-
-    inverted_img
-        .save("data/inverted_grayscale_image.jpg")
-        .unwrap();
-}
-
-pub fn serialize_input(input_path: &str, output_path: &str) -> Result<(), OnnxError> {
     let img_ndarray = preprocess_image(input_path);
+    
+    println!("{}", "✅ Image preprocessed. Converting to tensor proto...");
+
     let img_tensorproto = ndarray_to_tensor_proto::<f32>(img_ndarray, "data")?;
 
-    OnnxParser::save_data(&img_tensorproto, output_path)
+    println!("{}", "✅ Tensor proto created. Saving data...");
+
+    let result = OnnxParser::save_data(&img_tensorproto, output_path.clone());
+
+    match result {
+        Ok(_) => println!("\n{}\n", format!("🦀 DATA SAVED SUCCESSFULLY TO {}", output_path).magenta().bold()),
+        Err(_) => println!("\n{}\n", format!("🛑 Failed to save data to {}", output_path).red().bold()),
+    }
+
+    result
 }
 
-#[test]
-fn test_serialize_input() -> Result<(), OnnxError> {
-    // Change the return type to include the error
-    let input_path = "mnist.jpg";
-    let output_path = "data/test_serialized_data.pb";
-    // Perform serialization
-    preprocess_image_mnist(input_path);
-    Ok(())
-}
+//#[test]
+//fn test_serialize_input() -> Result<(), OnnxError> {
+//    // Change the return type to include the error
+//    let input_path = "mnist.jpg";
+//    let output_path = "data/test_serialized_data.pb";
+//    // Perform serialization
+//    preprocess_image_mnist(input_path);
+//    Ok(())
+//}
 
 //#[cfg(test)]
 //mod tests {

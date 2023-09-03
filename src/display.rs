@@ -1,7 +1,7 @@
 use crate::onnx_rustime::backend::helper::find_top_5_peak_classes;
 use crate::onnx_rustime::onnx_proto::onnx_ml_proto3::*;
 use crate::onnx_rustime::ops::utils::tensor_proto_to_ndarray;
-use crate::onnx_rustime::shared::{DOMAIN_SPECIFIC, IMAGENET_CLASSES, MNIST_CLASSES, VERBOSE};
+use crate::onnx_rustime::shared::{Model, IMAGENET_CLASSES, MNIST_CLASSES, MODEL_NAME, VERBOSE};
 use colored::*;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use std::path::Path;
@@ -23,7 +23,7 @@ const RUST_COLOR: &[u8] = &[209, 114, 119];
 /// - input_path: Path to the input test data for the selected model.
 /// - ground_truth_output_path: Path to the expected output test data for the selected model.
 /// - save_path: Optional path where the user wants to save the output data.
-pub fn menu() -> (&'static str, &'static str, &'static str, Option<String>) {
+pub fn menu() -> (String, String, Option<String>, Option<String>) {
     display_menu();
 
     let options = vec![
@@ -33,6 +33,7 @@ pub fn menu() -> (&'static str, &'static str, &'static str, Option<String>) {
         "ResNet-152",
         "SqueezeNet",
         "ZFNet",
+        "Pre-process and serialize an image",
         "Exit",
     ];
 
@@ -50,22 +51,78 @@ pub fn menu() -> (&'static str, &'static str, &'static str, Option<String>) {
         println!("You selected: {}", options[selection]);
     }
 
-    // Ask if the user wants to save the data
-    let save_data_selection = match Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Save the output data?")
-        .items(&["Yes", "No", "Back"])
-        .default(0)
-        .interact()
-        .unwrap()
-    {
-        0 => true,
-        1 => false,
-        2 => {
-            clear_screen();
-            return menu();
+    let default_input_paths = vec![
+        "models/bvlcalexnet-12/test_data_set_0/input_0.pb",
+        "models/caffenet-12/test_data_set_0/input_0.pb",
+        "models/mnist-8/test_data_set_0/input_0.pb",
+        "models/resnet18-v2-7/test_data_set_0/input_0.pb",
+        "models/squeezenet1.0-12/test_data_set_0/input_0.pb",
+        "models/zfnet512-12/test_data_set_0/input_0.pb",
+    ];
+
+    let input_path: String = loop {
+        if options[selection] == "Pre-process and serialize an image" {
+            // Special prompt logic for image processing
+            let path: String = Input::with_theme(&ColorfulTheme::default())
+              .with_prompt("Please provide a path for the image to be processed:\n(type 'BACK' to go back)")
+              .interact()
+              .unwrap();
+
+            if path.trim().to_uppercase() == "BACK" {
+                clear_screen();
+                return menu();
+            }
+
+            if Path::new(&path).exists() {
+                break path;
+            } else {
+                println!(
+                    "{}",
+                    "Provided path does not exist.\nPlease provide a valid image path.".red()
+                );
+            }
+        } else {
+            // Default prompt logic for models
+            let default_path = default_input_paths[selection].to_string();
+            let path: String = Input::with_theme(&ColorfulTheme::default())
+              .with_prompt("Please provide a path for the input data:\n(type 'BACK' to go back, Enter for default)")
+              .default(default_path.clone())
+              .interact()
+              .unwrap();
+
+            if path.trim().to_uppercase() == "BACK" {
+                clear_screen();
+                return menu();
+            }
+
+            if Path::new(&path).exists() {
+                break path;
+            } else {
+                println!("{}", "Provided path does not exist.\nPlease provide a valid path or press Enter for default.".red());
+            }
         }
-        _ => false,
     };
+
+    let mut save_data_selection = true; // Default to true for "Pre-process and serialize an image"
+
+    if options[selection] != "Pre-process and serialize an image" {
+        // Ask only if the user didn't select "Pre-process and serialize an image"
+        save_data_selection = match Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Save the output data?")
+            .items(&["Yes", "No", "Back"])
+            .default(0)
+            .interact()
+            .unwrap()
+        {
+            0 => true,
+            1 => false,
+            2 => {
+                clear_screen();
+                return menu();
+            }
+            _ => false,
+        };
+    }
 
     let default_save_paths = vec![
         "models/bvlcalexnet-12",
@@ -74,10 +131,21 @@ pub fn menu() -> (&'static str, &'static str, &'static str, Option<String>) {
         "models/resnet152-v2-7",
         "models/squeezenet1.0-12",
         "models/zfnet512-12",
+        ".",
     ];
 
     let save_path: Option<String> = if save_data_selection {
-        let default_path = format!("{}/output_demo.pb", default_save_paths[selection]);
+        let default_path = if options[selection] == "Pre-process and serialize an image" {
+            // Derive the save path from the input image path
+            let stem = Path::new(&input_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("pre_processed_input");
+            format!("./{}_pre_processed.pb", stem)
+        } else {
+            format!("{}/output_demo.pb", default_save_paths[selection])
+        };
+
         loop {
             let mut path: String = Input::with_theme(&ColorfulTheme::default())
               .with_prompt("Please provide a path to save output:\n(type 'BACK' to go back, Enter for default)")
@@ -110,75 +178,131 @@ pub fn menu() -> (&'static str, &'static str, &'static str, Option<String>) {
         None
     };
 
-    // Ask if the user wants to run in verbose mode
-    let verbose_selection = match Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Run in verbose mode?")
-        .items(&["Yes", "No", "Back"])
-        .default(0)
-        .interact()
-        .unwrap()
-    {
-        0 => true,
-        1 => false,
-        2 => {
-            clear_screen();
-            return menu();
-        }
-        _ => false,
-    };
+    if options[selection] != "Pre-process and serialize an image" {
+        // Ask if the user wants to run in verbose mode
+        let verbose_selection = match Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Run in verbose mode?")
+            .items(&["Yes", "No", "Back"])
+            .default(0)
+            .interact()
+            .unwrap()
+        {
+            0 => true,
+            1 => false,
+            2 => {
+                clear_screen();
+                return menu();
+            }
+            _ => false,
+        };
 
-    {
-        let mut v = VERBOSE.lock().unwrap();
-        *v = verbose_selection;
+        {
+            let mut v = VERBOSE.lock().unwrap();
+            *v = verbose_selection;
+        }
     }
 
-    let (model_path, input_path, output_path) = match options[selection] {
-        "AlexNet" => (
-            "models/bvlcalexnet-12/bvlcalexnet-12.onnx",
-            "models/bvlcalexnet-12/test_data_set_0/input_0.pb",
-            "models/bvlcalexnet-12/test_data_set_0/output_0.pb",
-        ),
-        "CaffeNet" => (
-            "models/caffenet-12/caffenet-12.onnx",
-            "models/caffenet-12/test_data_set_0/input_0.pb",
-            "models/caffenet-12/test_data_set_0/output_0.pb",
-        ),
-        "CNN-Mnist" => {
+    let (model_path, output_path) = match options[selection] {
+        "AlexNet" => {
             {
-                let mut d = DOMAIN_SPECIFIC.lock().unwrap();
-                *d = true;
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::AlexNet;
             }
-
             (
-                "models/mnist-8/mnist-8.onnx",
-                "models/mnist-8/test_data_set_0/input_0.pb",
-                "models/mnist-8/test_data_set_0/output_0.pb",
+                "models/bvlcalexnet-12/bvlcalexnet-12.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/bvlcalexnet-12/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
             )
         }
-        "ResNet-152" => (
-            "models/resnet152-v2-7/resnet152-v2-7.onnx",
-            "models/resnet18-v2-7/test_data_set_0/input_0.pb",
-            "models/resnet152-v2-7/test_data_set_0/output_0.pb",
-        ),
-        "SqueezeNet" => (
-            "models/squeezenet1.0-12/squeezenet1.0-12.onnx",
-            "models/squeezenet1.0-12/test_data_set_0/input_0.pb",
-            "models/squeezenet1.0-12/test_data_set_0/output_0.pb",
-        ),
-        "ZFNet" => (
-            "models/zfnet512-12/zfnet512-12.onnx",
-            "models/zfnet512-12/test_data_set_0/input_0.pb",
-            "models/zfnet512-12/test_data_set_0/output_0.pb",
-        ),
+        "CaffeNet" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::CaffeNet;
+            }
+            (
+                "models/caffenet-12/caffenet-12.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/caffenet-12/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
+            )
+        }
+        "CNN-Mnist" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::Mnist;
+            }
+            (
+                "models/mnist-8/mnist-8.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/mnist-8/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
+            )
+        }
+        "ResNet-152" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::ResNet;
+            }
+            (
+                "models/resnet152-v2-7/resnet152-v2-7.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/resnet152-v2-7/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
+            )
+        }
+        "SqueezeNet" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::SqueezeNet;
+            }
+            (
+                "models/squeezenet1.0-12/squeezenet1.0-12.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/squeezenet1.0-12/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
+            )
+        }
+        "ZFNet" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::ZFNet;
+            }
+            (
+                "models/zfnet512-12/zfnet512-12.onnx",
+                if input_path == default_input_paths[selection] {
+                    Some("models/zfnet512-12/test_data_set_0/output_0.pb".to_string())
+                } else {
+                    None
+                },
+            )
+        }
+        "Pre-process and serialize an image" => {
+            {
+                let mut d = MODEL_NAME.lock().unwrap();
+                *d = Model::PreProcessing;
+            }
+            ("PREPROCESSING", None)
+        }
         _ => {
             println!("Invalid selection");
-            return ("", "", "", None);
+            ("", None)
         }
     };
 
-    println!("{}", "\n🦀 LOADING MODEL...\n".green().bold());
+    println!("{}", "\n🦀 LOADING...\n".green().bold());
 
-    (model_path, input_path, output_path, save_path)
+    (model_path.to_string(), input_path, output_path, save_path)
 }
 
 fn display_menu() {
@@ -231,91 +355,99 @@ fn clear_screen() {
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
 }
 
-pub fn display_outputs(predicted: &TensorProto, expected: &TensorProto) {
+
+fn truncate_with_ellipsis(s: &str, max_len: usize) -> String {
+    if s.len() > max_len {
+        format!("…{}", &s[s.len() - (max_len - 1)..])
+    } else {
+        s.to_string()
+    }
+}
+
+pub fn display_outputs(predicted: &TensorProto, expected: Option<TensorProto>) {
+    let name_column_width = 35; // Fixed width
+    let model_name = {
+        let lock = MODEL_NAME.lock().unwrap();
+        lock.clone()
+    };
+
     let predicted_output = tensor_proto_to_ndarray::<f32>(predicted).unwrap();
-    let expected_output = tensor_proto_to_ndarray::<f32>(expected).unwrap();
 
     println!("{}", "Predicted Output:".bold().magenta());
     println!("{:?}\n", predicted_output);
 
     let predicted_top_5 = find_top_5_peak_classes(&predicted_output).unwrap();
-    println!("{}", "Predicted Top 5 Peak Classes:".bold().magenta());
-
-    let is_domain_specific = {
-        let lock = DOMAIN_SPECIFIC.lock().unwrap();
-        *lock
-    };
-
     for (batch_index, top_5) in predicted_top_5.iter().enumerate() {
-        println!("Batch {}: ", batch_index);
-        for &(peak, value) in top_5.iter() {  // Change here
-            let class_name = if is_domain_specific {
-                MNIST_CLASSES[peak]
-            } else {
-                IMAGENET_CLASSES[peak]
+        println!("[Batch {}]\n", batch_index);
+        println!(
+            "{:<16} {:<width$} {}",
+            "Predicted Peak".bold().magenta(),
+            "Class Name".bold().magenta(),
+            "Percentage".bold().magenta(),
+            width = name_column_width
+        );
+        println!(
+            "{} {} {}",
+            "---------------".bold().magenta(),
+            "-".repeat(name_column_width).bold().magenta(),
+            "------------------".bold().magenta()
+        );
+        for &(peak, value) in top_5.iter() {
+            let class_name = match model_name {
+                Model::Mnist => MNIST_CLASSES[peak],
+                _ => IMAGENET_CLASSES[peak],
             };
-            println!("Peak: {}, Class: {}, Value: {}", peak, class_name, value);
-        }
-    }    
-
-    println!("{}", "\nExpected Output:".bold().blue());
-    println!("{:?}\n", expected_output);
-
-    let expected_top_5 = find_top_5_peak_classes(&expected_output).unwrap();
-    println!("{}", "Expected Top 5 Peak Classes:".bold().blue());
-
-    for (batch_index, top_5) in expected_top_5.iter().enumerate() {
-        println!("Batch {}: ", batch_index);
-        for &(peak, value) in top_5 {
-            let class_name = if is_domain_specific {
-                MNIST_CLASSES[peak]
-            } else {
-                IMAGENET_CLASSES[peak]
-            };
-            println!("Peak: {}, Class: {}, Value: {}", peak, class_name, value);
+            let truncated_class_name = truncate_with_ellipsis(class_name, name_column_width);
+            let percentage = value * 100.0;
+            println!(
+                "{:<16} {:<width$} {:.2}%",
+                peak,
+                truncated_class_name,
+                percentage,
+                width = name_column_width
+            );
         }
     }
-    print!("\n");
+
+    if let Some(expected_tensor) = expected {
+        println!("{}", "\nExpected Output:".bold().blue());
+
+        let expected_output = tensor_proto_to_ndarray::<f32>(&expected_tensor).unwrap();
+        println!("{:?}\n", expected_output);
+
+        let expected_top_5 = find_top_5_peak_classes(&expected_output).unwrap();
+        for (batch_index, top_5) in expected_top_5.iter().enumerate() {
+            println!("[Batch {}]\n", batch_index);
+            println!(
+                "{:<16} {:<width$} {}",
+                "Expected Peak".bold().blue(),
+                "Class Name".bold().blue(),
+                "Percentage".bold().blue(),
+                width = name_column_width
+            );
+            println!(
+                "{} {} {}",
+                "---------------".bold().blue(),
+                "-".repeat(name_column_width).bold().blue(),
+                "------------------".bold().blue()
+            );
+
+            for &(peak, value) in top_5.iter() {
+                let class_name = match model_name {
+                    Model::Mnist => MNIST_CLASSES[peak],
+                    _ => IMAGENET_CLASSES[peak],
+                };
+                let truncated_class_name = truncate_with_ellipsis(class_name, name_column_width);
+                let percentage = value * 100.0;
+                println!(
+                    "{:<16} {:<width$} {:.2}%",
+                    peak,
+                    truncated_class_name,
+                    percentage,
+                    width = name_column_width
+                );
+            }
+        }
+    }
+    println!("\n");
 }
-
-
-// pub fn display_outputs(predicted: &TensorProto, expected: &TensorProto) {
-//     let predicted_output = tensor_proto_to_ndarray::<f32>(predicted).unwrap();
-//     let expected_output = tensor_proto_to_ndarray::<f32>(expected).unwrap();
-
-//     println!("{}", "Predicted Output:".bold().magenta());
-//     println!("{:?}\n", predicted_output);
-
-//     let predicted_peaks: Vec<usize> = find_peak_class(&predicted_output).unwrap();
-//     println!("{}", "Predicted Peak Classes:".bold().magenta(),);
-
-//     let is_domain_specific = {
-//         let lock = DOMAIN_SPECIFIC.lock().unwrap();
-//         *lock
-//     };
-
-//     for &peak in &predicted_peaks {
-//         let class_name = if is_domain_specific {
-//             MNIST_CLASSES[peak]
-//         } else {
-//             IMAGENET_CLASSES[peak]
-//         };
-//         println!("Peak: {}, Class: {}", peak, class_name);
-//     }
-
-//     println!("{}", "\nExpected Output:".bold().blue());
-//     println!("{:?}\n", expected_output);
-
-//     let expected_peaks = find_peak_class(&expected_output).unwrap();
-//     println!("{}", "Expected Peak Classes:".bold().blue());
-
-//     for &peak in &expected_peaks {
-//         let class_name = if is_domain_specific {
-//             MNIST_CLASSES[peak]
-//         } else {
-//             IMAGENET_CLASSES[peak]
-//         };
-//         println!("Peak: {}, Class: {}", peak, class_name);
-//     }
-//     print!("\n");
-// }

@@ -1,7 +1,7 @@
 mod onnx_rustime;
 use onnx_rustime::backend::parser::OnnxParser;
+use onnx_rustime::backend::pre_processing::serialize_image;
 use onnx_rustime::backend::run::run;
-use onnx_rustime::ops::utils::tensor_proto_to_ndarray;
 use std::env;
 mod display;
 use display::{display_outputs, menu};
@@ -11,20 +11,36 @@ fn main() {
 
     let (model_path, input_path, output_path, save_path_opt) = menu();
 
-    let model = OnnxParser::load_model(model_path).unwrap();
-    let input = OnnxParser::load_data(input_path).unwrap();
-    let expected_output = OnnxParser::load_data(output_path).unwrap();
+    if model_path == "PREPROCESSING" {
+        if let Some(save_path) = save_path_opt {
+            if let Err(err) = serialize_image(input_path, save_path) {
+                eprintln!("Failed to preprocess and serialize image: {:?}", err);
+            }
+            return;
+        } else {
+            eprintln!("No save path specified, exiting.");
+            return;
+        }
+    }
 
-    println!("input to the net: {:?}", tensor_proto_to_ndarray::<f32>(&input));
+    // If not preprocessing, proceed with model loading and inference
+    let model = OnnxParser::load_model(model_path).unwrap();
+
+    let input = OnnxParser::load_data(input_path).unwrap();
+
+    let expected_output = if let Some(path) = output_path {
+        Some(OnnxParser::load_data(path).unwrap())
+    } else {
+        None
+    };
 
     // Run the model
     let predicted_output = run(&model, input);
 
     // If save_path_opt contains a path, save the data
     if let Some(save_path) = save_path_opt {
-        OnnxParser::save_data(&predicted_output, &save_path).unwrap();
+        OnnxParser::save_data(&predicted_output, save_path).unwrap();
     }
 
-    display_outputs(&predicted_output, &expected_output);
-
+    display_outputs(&predicted_output, expected_output);
 }

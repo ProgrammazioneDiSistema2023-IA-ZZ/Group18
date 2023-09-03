@@ -132,8 +132,8 @@ def main():
         expected_output = onnx_rustime.py_load_data(exp_output_path)
         print(f"\nLoaded input with ID: {expected_output}")
 
-        onnx_rustime.py_print_data(input)
-        onnx_rustime.py_print_data(expected_output)
+        # onnx_rustime.py_print_data(input)
+        # onnx_rustime.py_print_data(expected_output)
 
         predicted_output = onnx_rustime.py_run(model, input, verbose)
 

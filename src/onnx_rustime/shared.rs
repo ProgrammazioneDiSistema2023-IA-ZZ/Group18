@@ -1,13 +1,23 @@
 use lazy_static::lazy_static;
-
 use std::sync::Mutex;
 
 lazy_static! {
     pub static ref VERBOSE: Mutex<bool> = Mutex::new(true);
 }
 
+#[derive(Clone)]
+pub enum Model {
+    AlexNet,
+    CaffeNet,
+    Mnist,
+    ResNet,
+    SqueezeNet,
+    ZFNet,
+    PreProcessing,
+}
+
 lazy_static! {
-    pub static ref DOMAIN_SPECIFIC: Mutex<bool> = Mutex::new(false);
+    pub static ref MODEL_NAME: Mutex<Model> = Mutex::new(Model::AlexNet);
 }
 
 pub const MNIST_CLASSES: [&str; 10] = [
